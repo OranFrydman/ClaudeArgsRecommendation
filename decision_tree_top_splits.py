@@ -626,6 +626,11 @@ def _parse_cell_to_list(val: Any) -> list[Any] | None:
     if pd.isna(val):
         return None
     s = str(val).strip()
+    # Strip one layer of wrapping quotes (CSV / Excel sometimes double-wrap JSON)
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        inner = s[1:-1].strip()
+        if inner.startswith("["):
+            s = inner.replace('\\"', '"')
     if not s.startswith("["):
         return None
     for parser in (json.loads, ast.literal_eval):
@@ -638,6 +643,54 @@ def _parse_cell_to_list(val: Any) -> list[Any] | None:
         if isinstance(obj, tuple):
             return list(obj)
     return None
+
+
+def _is_missing_cell(v: Any) -> bool:
+    if v is None:
+        return True
+    if isinstance(v, (list, tuple, dict, set)):
+        return False
+    try:
+        return bool(pd.isna(v))
+    except (ValueError, TypeError):
+        return False
+
+
+def _series_values_are_all_lists(s: pd.Series) -> bool:
+    for v in s:
+        if _is_missing_cell(v):
+            continue
+        if not isinstance(v, list):
+            return False
+    return True
+
+
+def _maybe_arrow_list_dtype(s: pd.Series) -> pd.Series:
+    """
+    If every non-null value is a ``list`` of strings, use PyArrow ``list<string>`` so
+    ``.dtype`` is not plain ``object``. Falls back to ``object`` on import or type errors.
+    """
+    if s.dropna().empty:
+        return s
+    try:
+        import pyarrow as pa
+    except ImportError:
+        return s
+    vals: list[Any] = []
+    for v in s:
+        if _is_missing_cell(v):
+            vals.append(None)
+            continue
+        if not isinstance(v, list):
+            return s
+        if not all(isinstance(x, str) for x in v):
+            return s
+        vals.append(v)
+    try:
+        arr = pa.array(vals, type=pa.list_(pa.string()))
+    except (pa.ArrowInvalid, TypeError, ValueError):
+        return s
+    return pd.Series(arr, index=s.index, dtype=pd.ArrowDtype(arr.type), name=s.name)
 
 
 def _try_bool_series(s: pd.Series) -> pd.Series | None:
@@ -690,22 +743,40 @@ def _try_datetime_series(s: pd.Series) -> pd.Series | None:
 
 
 def _try_list_series(s: pd.Series) -> pd.Series | None:
+    """
+    Detect list-like JSON / Python literals. Uses per-cell parsing so a few bad rows
+    do not block the whole column; requires most non-null cells to parse as lists.
+    """
     raw = s.dropna()
     if raw.empty:
         return None
     as_str = raw.astype(str).str.strip()
-    if as_str.str.startswith("[").mean() < 0.8:
+    looks = as_str.str.match(r"^\[", na=False)
+    if looks.mean() < 0.55:
         return None
+
     out_cells: list[Any] = []
+    n_in = 0
+    n_ok = 0
     for v in s:
         if pd.isna(v):
             out_cells.append(np.nan)
             continue
+        n_in += 1
         pl = _parse_cell_to_list(v)
-        if pl is None:
-            return None
-        out_cells.append(pl)
-    return pd.Series(out_cells, index=s.index, dtype=object)
+        if pl is not None:
+            out_cells.append(pl)
+            n_ok += 1
+        else:
+            out_cells.append(v)
+
+    if n_in == 0 or n_ok / n_in < 0.72:
+        return None
+
+    out = pd.Series(out_cells, index=s.index, dtype=object, name=s.name)
+    if _series_values_are_all_lists(out):
+        out = _maybe_arrow_list_dtype(out)
+    return out
 
 
 def parse_dataframe_dtypes(df: pd.DataFrame) -> pd.DataFrame:
@@ -781,7 +852,7 @@ def add_days_ago_columns_for_all_datetimes_features(df: pd.DataFrame) -> pd.Data
 
 
 if __name__ == "__main__":
-    FILE_PATH = "/Users/oranfrydman/CaludeProj/data_set_3009.csv"
+    FILE_PATH = "/Users/oranfrydman/CaludeProj/example_data.csv"
     TARGET_COLUMN = "Decision"
     NUM_SPLITS = 5
     CRITERION: Criterion = "entropy"
