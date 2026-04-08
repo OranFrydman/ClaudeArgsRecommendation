@@ -26,11 +26,26 @@ def _encode_target(df: pd.DataFrame, target_column: str) -> tuple[np.ndarray, La
 def left_mask_for_split(df: pd.DataFrame, split: dict[str, Any]) -> np.ndarray:
     """Boolean mask for the left branch of a split dict produced by :func:`top_single_split_options_df`."""
     col = split["feature"]
-    if split["kind"] == "numeric":
+    kind = split["kind"]
+    if kind == "numeric":
         x = df[col].to_numpy(dtype=float, copy=False)
         finite = np.isfinite(x)
         thr = float(split["threshold"])
         return finite & (x <= thr)
+    if kind == "boolean":
+        return (df[col] == split["value"]).fillna(False).to_numpy(dtype=bool)
+    if kind == "list_len":
+        lengths = _list_lengths(df[col])
+        finite = np.isfinite(lengths)
+        thr = float(split["threshold"])
+        return finite & (lengths <= thr)
+    if kind == "list_contains":
+        elem = split["value"]
+        out = np.zeros(len(df), dtype=bool)
+        for i, v in enumerate(df[col]):
+            if not _is_missing_cell(v) and hasattr(v, "__contains__"):
+                out[i] = elem in v
+        return out
     vals = df[col].astype("string").fillna("__nan__")
     v = split["value"]
     if v is None:
@@ -240,6 +255,49 @@ def _numeric_threshold_candidates(x: np.ndarray, max_candidates: int) -> np.ndar
     return np.unique(mids[idx])
 
 
+def _is_list_column(s: pd.Series) -> bool:
+    """Return True if the series holds list values (ArrowDtype list or object dtype of lists)."""
+    if isinstance(s.dtype, pd.ArrowDtype):
+        try:
+            import pyarrow as pa
+            return pa.types.is_list(s.dtype.pyarrow_dtype)
+        except ImportError:
+            return False
+    if s.dtype == object:
+        return _series_values_are_all_lists(s)
+    return False
+
+
+def _list_lengths(s: pd.Series) -> np.ndarray:
+    """Return a float array of list lengths; NaN where the cell is missing."""
+    out = np.empty(len(s), dtype=float)
+    for i, v in enumerate(s):
+        if _is_missing_cell(v):
+            out[i] = np.nan
+        elif hasattr(v, "__len__"):
+            out[i] = float(len(v))
+        else:
+            out[i] = np.nan
+    return out
+
+
+def _list_unique_elements(s: pd.Series) -> list[Any | None]:
+    """Collect unique scalar elements across all lists in the series."""
+    seen: set[Any] = set()
+    for v in s:
+        if v is None or _is_missing_cell(v):
+            continue
+        if not hasattr(v, "__iter__") or isinstance(v, str):
+            continue
+        for elem in v:
+            if isinstance(elem, (dict, list)):  # 👈 skip dicts AND nested lists
+                continue
+            seen.add(elem)
+
+    elems = sorted(seen, key=str)
+    return elems
+
+
 def top_single_split_options_df(
     df: pd.DataFrame,
     target_column: str,
@@ -296,6 +354,89 @@ def top_single_split_options_df(
                         ),
                     }
                     results.append((gain, row))
+            continue
+
+        # Boolean path
+        if pd.api.types.is_bool_dtype(s):
+            left = (s == True).fillna(False).to_numpy(dtype=bool)  # noqa: E712
+            if left.sum() > 0 and (~left).sum() > 0:
+                gain = _impurity_decrease(y, left, criterion, n_classes)
+                if gain > 0:
+                    row = {
+                        "feature": col,
+                        "kind": "boolean",
+                        "value": True,
+                        "operator": "==",
+                        "split_rule": f"{col} == True",
+                        "criterion": criterion,
+                        "impurity_decrease": float(gain),
+                        "n_left": int(left.sum()),
+                        "n_right": int((~left).sum()),
+                        "metrics_per_class": _precision_recall_per_class_majority_leaf(
+                            y, left, le_y.classes_, n_classes
+                        ),
+                    }
+                    results.append((gain, row))
+            continue
+
+        # List path: (1) length threshold, (2) element-in-list
+        if _is_list_column(s):
+            lengths = _list_lengths(s)
+            finite = np.isfinite(lengths)
+            if finite.any():
+                for thr in _numeric_threshold_candidates(lengths[finite], max_thresholds_per_numeric):
+                    left = finite & (lengths <= thr)
+                    gain = _impurity_decrease(y, left, criterion, n_classes)
+                    if gain > 0:
+                        row = {
+                            "feature": col,
+                            "kind": "list_len",
+                            "threshold": float(thr),
+                            "operator": "len <=",
+                            "split_rule": f"len({col}) <= {thr:g}",
+                            "criterion": criterion,
+                            "impurity_decrease": float(gain),
+                            "n_left": int(left.sum()),
+                            "n_right": int((~left).sum()),
+                            "metrics_per_class": _precision_recall_per_class_majority_leaf(
+                                y, left, le_y.classes_, n_classes
+                            ),
+                        }
+                        results.append((gain, row))
+            unqiue_elems = _list_unique_elements(s)
+            if unqiue_elems:
+                for elem in unqiue_elems:
+                    if elem =='13934402797805':
+                        pass
+
+                    def safe_contains(v):
+                        if v is None or v is pd.NA:
+                            return False
+                        try:
+                            return elem in v
+                        except Exception:
+                            return False
+
+                    left = s.apply(safe_contains).to_numpy(dtype=bool)
+                    if left.sum() == 0 or (~left).sum() == 0:
+                        continue
+                    gain = _impurity_decrease(y, left, criterion, n_classes)
+                    if gain > 0:
+                        row = {
+                            "feature": col,
+                            "kind": "list_contains",
+                            "value": elem,
+                            "operator": "in",
+                            "split_rule": f"{repr(elem)} in {col}",
+                            "criterion": criterion,
+                            "impurity_decrease": float(gain),
+                            "n_left": int(left.sum()),
+                            "n_right": int((~left).sum()),
+                            "metrics_per_class": _precision_recall_per_class_majority_leaf(
+                                y, left, le_y.classes_, n_classes
+                            ),
+                        }
+                        results.append((gain, row))
             continue
 
         # Categorical / string: binary split value vs rest
@@ -545,14 +686,17 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     return cleaned_df
 
-def filter_primary_secondary_decisions(df: pd.DataFrame) -> pd.DataFrame:
+def filter_primary_secondary_decisions(
+    df: pd.DataFrame,
+    prim_idx: int | None = None,
+    second_idx: int | None = None,
+) -> pd.DataFrame:
     Decision = df['Decision'].drop_duplicates().reset_index(drop=True)
     print('Choose 2 indexes 1 at a time of Primary and Second decision')
     print(Decision)
-    print("Column dtypes after read_csv:")
-    prim = int(input("Choose Primary: "))
+    prim = prim_idx if prim_idx is not None else int(input("Choose Primary: "))
     primary_decision = Decision[prim]
-    second = int(input("Choose second: "))
+    second = second_idx if second_idx is not None else int(input("Choose second: "))
     secondary_decision = Decision[second]
     df_filtered = df[df["Decision"].isin([primary_decision, secondary_decision])]
     return df_filtered
@@ -615,6 +759,68 @@ def run_llm_QA_on_splits(txt_path: str) -> str | None:
 
 _BOOL_TRUE = frozenset({"True", "true", "TRUE"})
 _BOOL_FALSE = frozenset({"False", "false", "FALSE"})
+
+
+def _parse_cell_to_dict(val: Any) -> dict | None:
+    """Return a Python dict if ``val`` looks like a dict literal; else ``None``."""
+    if isinstance(val, dict):
+        return val
+    if pd.isna(val):
+        return None
+    s = str(val).strip()
+    # Strip one layer of wrapping quotes (CSV / Excel sometimes double-wrap JSON)
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        inner = s[1:-1].strip()
+        if inner.startswith("{"):
+            s = inner.replace('\\"', '"')
+    if not s.startswith("{"):
+        return None
+    import re
+
+    s = re.sub(r'(\b\w+\b)\s*:', r'"\1":', s)
+
+    for parser in (json.loads, ast.literal_eval):
+        try:
+            obj = parser(s)
+        except (ValueError, SyntaxError, json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
+
+
+def _try_dict_series(s: pd.Series) -> pd.Series | None:
+    """
+    Detect dict-like JSON / Python literals. Uses per-cell parsing so a few bad rows
+    do not block the whole column; requires most non-null cells to parse as dicts.
+    """
+    raw = s.dropna()
+    if raw.empty:
+        return None
+    as_str = raw.astype(str).str.strip()
+    looks = as_str.str.match(r"^\{", na=False)
+    if sum(looks)==0:
+        return None
+
+    out_cells: list[Any] = []
+    n_in = 0
+    n_ok = 0
+    for v in s:
+        if pd.isna(v):
+            out_cells.append(np.nan)
+            continue
+        n_in += 1
+        pd_ = _parse_cell_to_dict(v)
+        if pd_ is not None:
+            out_cells.append(pd_)
+            n_ok += 1
+        else:
+            out_cells.append(v)
+
+    if n_in == 0 or n_ok / n_in < 0.72:
+        return None
+
+    return pd.Series(out_cells, index=s.index, dtype=object, name=s.name)
 
 
 def _parse_cell_to_list(val: Any) -> list[Any] | None:
@@ -781,9 +987,9 @@ def _try_list_series(s: pd.Series) -> pd.Series | None:
 
 def parse_dataframe_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Best-effort coercion of object/string columns to booleans, datetimes, or list values.
+    Best-effort coercion of object/string columns to booleans, datetimes, list, or dict values.
 
-    Order per column: **list-like strings** → **booleans** → **datetimes**.
+    Order per column: **dict-like strings** → **list-like strings** → **booleans** → **datetimes**.
     Numeric columns are left unchanged. Already-typed boolean/datetime columns are unchanged.
     """
     out = df.copy()
@@ -799,6 +1005,10 @@ def parse_dataframe_dtypes(df: pd.DataFrame) -> pd.DataFrame:
             out[col] = s
 
         if s.dtype == object or pd.api.types.is_string_dtype(s):
+            dct = _try_dict_series(s)
+            if dct is not None:
+                out[col] = dct
+                continue
             lst = _try_list_series(s)
             if lst is not None:
                 out[col] = lst
@@ -851,8 +1061,27 @@ def add_days_ago_columns_for_all_datetimes_features(df: pd.DataFrame) -> pd.Data
     return out
 
 
+def add_Object_dtype_missing(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    For every plain-object column that is not numeric, bool, datetime, list, or a pure-string
+    column, append a boolean column ``"{col} Exists"`` that is True where the original cell is
+    non-null and False where it is null.
+    """
+    out = df.copy()
+    for col in df.columns:
+        s = df[col]
+        if s.dtype == 'O':
+            non_null = s.dropna()
+            if non_null.empty:
+                continue
+            if non_null.apply(lambda x: isinstance(x, str)).all():
+                continue
+            out[f"{col} Exists"] = s.notna()
+    return out
+
+
 if __name__ == "__main__":
-    FILE_PATH = "/Users/oranfrydman/CaludeProj/example_data.csv"
+    FILE_PATH = "/Users/oranfrydman/CaludeProj/data_set_3009.csv"
     TARGET_COLUMN = "Decision"
     NUM_SPLITS = 5
     CRITERION: Criterion = "entropy"
@@ -861,6 +1090,7 @@ if __name__ == "__main__":
     df = clean_dataset(df)
     df = parse_dataframe_dtypes(df)
     df = add_days_ago_columns_for_all_datetimes_features(df)
+    df = add_Object_dtype_missing(df)
     df = filter_primary_secondary_decisions(df)
     print(df.dtypes)
 
@@ -884,7 +1114,7 @@ if __name__ == "__main__":
 
 #todo:
 # - input ( csv , target_col)
-#- 2 decisions (try to devide)
+#- 2 decisions (try to devide) str : In , ==
 
 # SYstem output - 5 best splits
 # LLM iteration - applicable sensabilty
