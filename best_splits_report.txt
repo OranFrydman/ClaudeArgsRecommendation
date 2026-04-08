@@ -1,6 +1,33 @@
 Best splits for target column: 'Decision'
 
 Split 1
+  Rule: 'eligble' in Tags
+  Score improvement: 0.878544
+  Left rows: 240
+  Right rows: 566
+  Precision / recall per target class (majority class per leaf):
+    'False': precision=1.0000  recall=1.0000  support=566
+    'True': precision=1.0000  recall=1.0000  support=240
+
+Split 2
+  Rule: len(Tags) <= 10.5
+  Score improvement: 0.051319
+  Left rows: 783
+  Right rows: 23
+  Precision / recall per target class (majority class per leaf):
+    'False': precision=0.7229  recall=1.0000  support=566
+    'True': precision=1.0000  recall=0.0958  support=240
+
+Split 3
+  Rule: len(Tags) <= 3.5
+  Score improvement: 0.049609
+  Left rows: 74
+  Right rows: 732
+  Precision / recall per target class (majority class per leaf):
+    'False': precision=0.7022  recall=1.0000  support=566
+    'True': precision=0.0000  recall=0.0000  support=240
+
+Split 4
   Rule: ERC <= 83.5
   Score improvement: 0.011336
   Left rows: 275
@@ -9,38 +36,11 @@ Split 1
     'False': precision=0.7022  recall=1.0000  support=566
     'True': precision=0.0000  recall=0.0000  support=240
 
-Split 2
+Split 5
   Rule: ERC <= 82.5
   Score improvement: 0.010754
   Left rows: 261
   Right rows: 545
-  Precision / recall per target class (majority class per leaf):
-    'False': precision=0.7022  recall=1.0000  support=566
-    'True': precision=0.0000  recall=0.0000  support=240
-
-Split 3
-  Rule: ERC <= 80.5
-  Score improvement: 0.010406
-  Left rows: 237
-  Right rows: 569
-  Precision / recall per target class (majority class per leaf):
-    'False': precision=0.7022  recall=1.0000  support=566
-    'True': precision=0.0000  recall=0.0000  support=240
-
-Split 4
-  Rule: ERC <= 81.5
-  Score improvement: 0.010296
-  Left rows: 253
-  Right rows: 553
-  Precision / recall per target class (majority class per leaf):
-    'False': precision=0.7022  recall=1.0000  support=566
-    'True': precision=0.0000  recall=0.0000  support=240
-
-Split 5
-  Rule: ERC <= 84.5
-  Score improvement: 0.010034
-  Left rows: 292
-  Right rows: 514
   Precision / recall per target class (majority class per leaf):
     'False': precision=0.7022  recall=1.0000  support=566
     'True': precision=0.0000  recall=0.0000  support=240
