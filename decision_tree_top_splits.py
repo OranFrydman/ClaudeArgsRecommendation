@@ -281,7 +281,7 @@ def _list_lengths(s: pd.Series) -> np.ndarray:
     return out
 
 
-def _list_unique_elements(s: pd.Series) -> list[Any]:
+def _list_unique_elements(s: pd.Series) -> list[Any | None]:
     """Collect unique scalar elements across all lists in the series."""
     seen: set[Any] = set()
     for v in s:
@@ -290,7 +290,10 @@ def _list_unique_elements(s: pd.Series) -> list[Any]:
         if not hasattr(v, "__iter__") or isinstance(v, str):
             continue
         for elem in v:
+            if isinstance(elem, (dict, list)):  # 👈 skip dicts AND nested lists
+                continue
             seen.add(elem)
+
     elems = sorted(seen, key=str)
     return elems
 
@@ -400,30 +403,40 @@ def top_single_split_options_df(
                             ),
                         }
                         results.append((gain, row))
+            unqiue_elems = _list_unique_elements(s)
+            if unqiue_elems:
+                for elem in unqiue_elems:
+                    if elem =='13934402797805':
+                        pass
 
-            for elem in _list_unique_elements(s):
-                if elem == 'eligble':
-                    pass
-                left = s.apply(lambda v: elem in v).to_numpy(dtype=bool)
-                if left.sum() == 0 or (~left).sum() == 0:
-                    continue
-                gain = _impurity_decrease(y, left, criterion, n_classes)
-                if gain > 0:
-                    row = {
-                        "feature": col,
-                        "kind": "list_contains",
-                        "value": elem,
-                        "operator": "in",
-                        "split_rule": f"{repr(elem)} in {col}",
-                        "criterion": criterion,
-                        "impurity_decrease": float(gain),
-                        "n_left": int(left.sum()),
-                        "n_right": int((~left).sum()),
-                        "metrics_per_class": _precision_recall_per_class_majority_leaf(
-                            y, left, le_y.classes_, n_classes
-                        ),
-                    }
-                    results.append((gain, row))
+                    def safe_contains(v):
+                        if v is None or v is pd.NA:
+                            return False
+                        try:
+                            return elem in v
+                        except Exception:
+                            return False
+
+                    left = s.apply(safe_contains).to_numpy(dtype=bool)
+                    if left.sum() == 0 or (~left).sum() == 0:
+                        continue
+                    gain = _impurity_decrease(y, left, criterion, n_classes)
+                    if gain > 0:
+                        row = {
+                            "feature": col,
+                            "kind": "list_contains",
+                            "value": elem,
+                            "operator": "in",
+                            "split_rule": f"{repr(elem)} in {col}",
+                            "criterion": criterion,
+                            "impurity_decrease": float(gain),
+                            "n_left": int(left.sum()),
+                            "n_right": int((~left).sum()),
+                            "metrics_per_class": _precision_recall_per_class_majority_leaf(
+                                y, left, le_y.classes_, n_classes
+                            ),
+                        }
+                        results.append((gain, row))
             continue
 
         # Categorical / string: binary split value vs rest
@@ -748,6 +761,68 @@ _BOOL_TRUE = frozenset({"True", "true", "TRUE"})
 _BOOL_FALSE = frozenset({"False", "false", "FALSE"})
 
 
+def _parse_cell_to_dict(val: Any) -> dict | None:
+    """Return a Python dict if ``val`` looks like a dict literal; else ``None``."""
+    if isinstance(val, dict):
+        return val
+    if pd.isna(val):
+        return None
+    s = str(val).strip()
+    # Strip one layer of wrapping quotes (CSV / Excel sometimes double-wrap JSON)
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        inner = s[1:-1].strip()
+        if inner.startswith("{"):
+            s = inner.replace('\\"', '"')
+    if not s.startswith("{"):
+        return None
+    import re
+
+    s = re.sub(r'(\b\w+\b)\s*:', r'"\1":', s)
+
+    for parser in (json.loads, ast.literal_eval):
+        try:
+            obj = parser(s)
+        except (ValueError, SyntaxError, json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
+
+
+def _try_dict_series(s: pd.Series) -> pd.Series | None:
+    """
+    Detect dict-like JSON / Python literals. Uses per-cell parsing so a few bad rows
+    do not block the whole column; requires most non-null cells to parse as dicts.
+    """
+    raw = s.dropna()
+    if raw.empty:
+        return None
+    as_str = raw.astype(str).str.strip()
+    looks = as_str.str.match(r"^\{", na=False)
+    if sum(looks)==0:
+        return None
+
+    out_cells: list[Any] = []
+    n_in = 0
+    n_ok = 0
+    for v in s:
+        if pd.isna(v):
+            out_cells.append(np.nan)
+            continue
+        n_in += 1
+        pd_ = _parse_cell_to_dict(v)
+        if pd_ is not None:
+            out_cells.append(pd_)
+            n_ok += 1
+        else:
+            out_cells.append(v)
+
+    if n_in == 0 or n_ok / n_in < 0.72:
+        return None
+
+    return pd.Series(out_cells, index=s.index, dtype=object, name=s.name)
+
+
 def _parse_cell_to_list(val: Any) -> list[Any] | None:
     """Return a Python list if ``val`` looks like a list literal; else ``None``."""
     if isinstance(val, list):
@@ -912,9 +987,9 @@ def _try_list_series(s: pd.Series) -> pd.Series | None:
 
 def parse_dataframe_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Best-effort coercion of object/string columns to booleans, datetimes, or list values.
+    Best-effort coercion of object/string columns to booleans, datetimes, list, or dict values.
 
-    Order per column: **list-like strings** → **booleans** → **datetimes**.
+    Order per column: **dict-like strings** → **list-like strings** → **booleans** → **datetimes**.
     Numeric columns are left unchanged. Already-typed boolean/datetime columns are unchanged.
     """
     out = df.copy()
@@ -930,6 +1005,10 @@ def parse_dataframe_dtypes(df: pd.DataFrame) -> pd.DataFrame:
             out[col] = s
 
         if s.dtype == object or pd.api.types.is_string_dtype(s):
+            dct = _try_dict_series(s)
+            if dct is not None:
+                out[col] = dct
+                continue
             lst = _try_list_series(s)
             if lst is not None:
                 out[col] = lst
@@ -991,8 +1070,6 @@ def add_Object_dtype_missing(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     for col in df.columns:
         s = df[col]
-        if col == "RMA information":
-            pass
         if s.dtype == 'O':
             non_null = s.dropna()
             if non_null.empty:
@@ -1014,7 +1091,7 @@ if __name__ == "__main__":
     df = parse_dataframe_dtypes(df)
     df = add_days_ago_columns_for_all_datetimes_features(df)
     df = add_Object_dtype_missing(df)
-    df = filter_primary_secondary_decisions(df, prim_idx=0, second_idx=1)
+    df = filter_primary_secondary_decisions(df)
     print(df.dtypes)
 
     splits = top_single_split_options_df(

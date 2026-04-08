@@ -1,47 +1,47 @@
 Best splits for target column: 'Decision'
 
 Split 1
-  Rule: 'eligble' in Tags
-  Score improvement: 0.878544
-  Left rows: 240
-  Right rows: 566
+  Rule: Comment inquiry date - Purchase Date | days <= 3.5
+  Score improvement: 0.837550
+  Left rows: 16
+  Right rows: 22
   Precision / recall per target class (majority class per leaf):
-    'False': precision=1.0000  recall=1.0000  support=566
-    'True': precision=1.0000  recall=1.0000  support=240
+    'Order created recentley | Instruct to wait 24 hours': precision=1.0000  recall=0.9412  support=17
+    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9545  recall=1.0000  support=21
 
 Split 2
-  Rule: len(Tags) <= 10.5
-  Score improvement: 0.051319
-  Left rows: 783
-  Right rows: 23
+  Rule: Comment inquiry date - The date the order was created | days <= 3.5
+  Score improvement: 0.837550
+  Left rows: 16
+  Right rows: 22
   Precision / recall per target class (majority class per leaf):
-    'False': precision=0.7229  recall=1.0000  support=566
-    'True': precision=1.0000  recall=0.0958  support=240
+    'Order created recentley | Instruct to wait 24 hours': precision=1.0000  recall=0.9412  support=17
+    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9545  recall=1.0000  support=21
 
 Split 3
-  Rule: len(Tags) <= 3.5
-  Score improvement: 0.049609
-  Left rows: 74
-  Right rows: 732
+  Rule: The channel that we will follow up with the customer is null
+  Score improvement: 0.734012
+  Left rows: 15
+  Right rows: 23
   Precision / recall per target class (majority class per leaf):
-    'False': precision=0.7022  recall=1.0000  support=566
-    'True': precision=0.0000  recall=0.0000  support=240
+    'Order created recentley | Instruct to wait 24 hours': precision=1.0000  recall=0.8824  support=17
+    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9130  recall=1.0000  support=21
 
 Split 4
-  Rule: ERC <= 83.5
-  Score improvement: 0.011336
-  Left rows: 275
-  Right rows: 531
+  Rule: The ID of the escalation tag based on the organization == 'c91968c0-b698-4897-9f05-7a95069fb7b3'
+  Score improvement: 0.694967
+  Left rows: 21
+  Right rows: 17
   Precision / recall per target class (majority class per leaf):
-    'False': precision=0.7022  recall=1.0000  support=566
-    'True': precision=0.0000  recall=0.0000  support=240
+    'Order created recentley | Instruct to wait 24 hours': precision=0.9412  recall=0.9412  support=17
+    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9524  recall=0.9524  support=21
 
 Split 5
-  Rule: ERC <= 82.5
-  Score improvement: 0.010754
-  Left rows: 261
-  Right rows: 545
+  Rule: The ID of the escalation tag based on the organization is null
+  Score improvement: 0.694967
+  Left rows: 17
+  Right rows: 21
   Precision / recall per target class (majority class per leaf):
-    'False': precision=0.7022  recall=1.0000  support=566
-    'True': precision=0.0000  recall=0.0000  support=240
+    'Order created recentley | Instruct to wait 24 hours': precision=0.9412  recall=0.9412  support=17
+    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9524  recall=0.9524  support=21
 
