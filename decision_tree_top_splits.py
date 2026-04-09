@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import ast
 import json
 import os
@@ -7,10 +6,8 @@ from openai import OpenAI
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.patches import FancyBboxPatch
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.preprocessing import LabelEncoder
 
@@ -60,9 +57,9 @@ def _class_counts_str(y_leaf: np.ndarray, le: LabelEncoder, n_classes: int) -> s
 
 
 def impure_leaf_examples(
-    df: pd.DataFrame,
-    target_column: str,
-    split: dict[str, Any],
+        df: pd.DataFrame,
+        target_column: str,
+        split: dict[str, Any],
 ) -> dict[str, Any]:
     """
     Rows in each leaf whose true label is **not** the leaf majority class (impure / minority rows).
@@ -102,83 +99,6 @@ def impure_leaf_examples(
     }
 
 
-def plot_split_stump(
-    df: pd.DataFrame,
-    target_column: str,
-    split: dict[str, Any],
-    criterion: Criterion = "entropy",
-    *,
-    title: str | None = None,
-    figsize: tuple[float, float] = (11, 6.5),
-) -> plt.Figure:
-    """
-    Draw a depth-1 decision stump (root + two leaves) with class counts and impurity per leaf.
-    """
-    y, le = _encode_target(df, target_column)
-    n_classes = int(y.max()) + 1
-    left = left_mask_for_split(df, split)
-    y_l, y_r = y[left], y[~left]
-    g_l = _impurity(y_l, criterion, n_classes)
-    g_r = _impurity(y_r, criterion, n_classes)
-    maj_l = int(np.argmax(np.bincount(y_l, minlength=n_classes)))
-    maj_r = int(np.argmax(np.bincount(y_r, minlength=n_classes)))
-
-    fig, ax = plt.subplots(figsize=figsize)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis("off")
-    if title:
-        ax.set_title(title, fontsize=12)
-
-    def _box(xy: tuple[float, float], w: float, h: float, text: str, fc: str) -> None:
-        x, y0 = xy
-        patch = FancyBboxPatch(
-            (x - w / 2, y0 - h / 2),
-            w,
-            h,
-            boxstyle="round,pad=0.02",
-            linewidth=1.2,
-            edgecolor="#333",
-            facecolor=fc,
-        )
-        ax.add_patch(patch)
-        ax.text(x, y0, text, ha="center", va="center", fontsize=9, family="monospace")
-
-    root_rule = split.get("split_rule", "?")
-    root_txt = f"Split\n{root_rule}\n\nn={len(df)}"
-    _box((0.5, 0.78), 0.52, 0.18, root_txt, "#E8DCC8")
-
-    left_txt = (
-        f"LEFT\nn={len(y_l)}\n{criterion}={g_l:.4f}\n"
-        f"majority: {le.classes_[maj_l]}\n{_class_counts_str(y_l, le, n_classes)}"
-    )
-    _box((0.28, 0.32), 0.42, 0.36, left_txt, "#C8E6D5")
-
-    right_txt = (
-        f"RIGHT\nn={len(y_r)}\n{criterion}={g_r:.4f}\n"
-        f"majority: {le.classes_[maj_r]}\n{_class_counts_str(y_r, le, n_classes)}"
-    )
-    _box((0.72, 0.32), 0.42, 0.36, right_txt, "#C8D5E8")
-
-    ax.annotate(
-        "",
-        xy=(0.28, 0.52),
-        xytext=(0.45, 0.68),
-        arrowprops=dict(arrowstyle="->", color="#333", lw=1.2),
-    )
-    ax.text(0.32, 0.62, "True", fontsize=9)
-    ax.annotate(
-        "",
-        xy=(0.72, 0.52),
-        xytext=(0.55, 0.68),
-        arrowprops=dict(arrowstyle="->", color="#333", lw=1.2),
-    )
-    ax.text(0.68, 0.62, "False", fontsize=9)
-
-    fig.tight_layout()
-    return fig
-
-
 def _impurity(y: np.ndarray, criterion: Criterion, n_classes: int) -> float:
     """Node impurity for labels in {0, ..., n_classes-1}."""
     n = y.size
@@ -193,10 +113,10 @@ def _impurity(y: np.ndarray, criterion: Criterion, n_classes: int) -> float:
 
 
 def _impurity_decrease(
-    y: np.ndarray,
-    left_mask: np.ndarray,
-    criterion: Criterion,
-    n_classes: int,
+        y: np.ndarray,
+        left_mask: np.ndarray,
+        criterion: Criterion,
+        n_classes: int,
 ) -> float:
     """Weighted impurity decrease (same as sklearn's impurity improvement for a split)."""
     n = y.size
@@ -213,10 +133,10 @@ def _impurity_decrease(
 
 
 def _precision_recall_per_class_majority_leaf(
-    y: np.ndarray,
-    left_mask: np.ndarray,
-    class_names: np.ndarray,
-    n_classes: int,
+        y: np.ndarray,
+        left_mask: np.ndarray,
+        class_names: np.ndarray,
+        n_classes: int,
 ) -> dict[str, dict[str, float | int]]:
     """
     Predict each row by the majority class in its leaf (left vs right), then per-class
@@ -299,13 +219,13 @@ def _list_unique_elements(s: pd.Series) -> list[Any | None]:
 
 
 def top_single_split_options_df(
-    df: pd.DataFrame,
-    target_column: str,
-    *,
-    criterion: Criterion = "entropy",
-    k: int = 5,
-    max_thresholds_per_numeric: int = 256,
-    random_state: int | None = None,
+        df: pd.DataFrame,
+        target_column: str,
+        *,
+        criterion: Criterion = "entropy",
+        k: int = 5,
+        max_thresholds_per_numeric: int = 256,
+        random_state: int | None = None,
 ) -> list[dict[str, Any]]:
     """Best one-shot binary splits from an in-memory DataFrame (same logic as CSV path helper).
 
@@ -406,9 +326,6 @@ def top_single_split_options_df(
             unqiue_elems = _list_unique_elements(s)
             if unqiue_elems:
                 for elem in unqiue_elems:
-                    if elem =='13934402797805':
-                        pass
-
                     def safe_contains(v):
                         if v is None or v is pd.NA:
                             return False
@@ -456,6 +373,7 @@ def top_single_split_options_df(
                     "feature": col,
                     "kind": "categorical",
                     "value": str(cat) if cat != "__nan__" else None,
+                    "operator": "==",
                     "split_rule": (
                         f"{col} == {repr(cat)}" if cat != "__nan__" else f"{col} is null"
                     ),
@@ -485,14 +403,14 @@ def top_single_split_options_df(
 
 
 def top_single_split_options(
-    csv_path: str,
-    target_column: str,
-    *,
-    criterion: Criterion = "entropy",
-    k: int = 5,
-    max_thresholds_per_numeric: int = 256,
-    random_state: int | None = 0,
-    **read_csv_kw: Any,
+        csv_path: str,
+        target_column: str,
+        *,
+        criterion: Criterion = "entropy",
+        k: int = 5,
+        max_thresholds_per_numeric: int = 256,
+        random_state: int | None = 0,
+        **read_csv_kw: Any,
 ) -> list[dict[str, Any]]:
     """
     Load a CSV and return up to ``k`` best one-shot binary splits for purity of ``target_column``.
@@ -540,39 +458,26 @@ class TopSplitsResult:
 
 
 def top_single_split_options_result(
-    csv_path: str,
-    target_column: str,
-    **kwargs: Any,
+        csv_path: str,
+        target_column: str,
+        **kwargs: Any,
 ) -> TopSplitsResult:
     """Same as ``top_single_split_options`` but returns a small dataclass wrapper."""
     criterion = kwargs.get("criterion", "entropy")
     splits = top_single_split_options(csv_path, target_column, **kwargs)
     return TopSplitsResult(splits=splits, target_column=target_column, criterion=criterion)
 
+
 # New function for running the top splits pipeline
 def run_top_splits_pipeline(
-    df: pd.DataFrame,
-    target_column: str,
-    splits: list[dict[str, Any]],
-    criterion: Criterion,
+        df: pd.DataFrame,
+        target_column: str,
+        splits: list[dict[str, Any]],
+        criterion: Criterion,
 ) -> None:
     out_dir = Path(__file__).resolve().parent
 
     best = splits[0]
-
-    # --- Plot and save tree ---
-    fig = plot_split_stump(
-        df,
-        target_column,
-        best,
-        criterion=criterion,
-        title=f"Best single split ({criterion})",
-    )
-    tree_png = out_dir / "split_stump.png"
-    fig.savefig(tree_png, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved tree figure: {tree_png}")
-    print()
 
     # --- Impurity analysis ---
     imp = impure_leaf_examples(df, target_column, best)
@@ -587,11 +492,10 @@ def run_top_splits_pipeline(
     if n_imp:
         impure_csv = out_dir / "split_impure_examples.csv"
         imp["combined"].to_csv(impure_csv, index=False)
-        print(f"Wrote: {impure_csv}")
         print(imp["combined"].head(15).to_string())
 
     print()
-    # --- Print splits summary ---
+
     def save_splits_report(splits, target_column, output_path="best_splits_report.txt"):
         output_path = Path(output_path)
 
@@ -615,17 +519,20 @@ def run_top_splits_pipeline(
                 f.write("\n")
 
         print(f"Saved report to: {output_path.resolve()}")
+
     save_splits_report(splits, target_column)
 
 
 def top_single_split_options_result_df(
-    df: pd.DataFrame,
-    target_column: str,
-    **kwargs: Any,
+        df: pd.DataFrame,
+        target_column: str,
+        **kwargs: Any,
 ) -> TopSplitsResult:
     criterion = kwargs.get("criterion", "entropy")
     splits = top_single_split_options_df(df, target_column, **kwargs)
     return TopSplitsResult(splits=splits, target_column=target_column, criterion=criterion)
+
+
 def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     cleaned_df = df.copy()
 
@@ -650,7 +557,8 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     # Remove fixed list of columns explicitly
     FIXED_DROP_COLUMNS = [
-        "Workflow title","Intent decision","Simulated Decision","Args Resolved At","Selected intent ids","Comment inquiry date.1","All the ticket comments decisions"
+        "Workflow title", "Intent decision", "Simulated Decision", "Args Resolved At", "Selected intent ids",
+        "Comment inquiry date.1", "All the ticket comments decisions"
     ]
 
     removed_fixed_cols = []
@@ -674,10 +582,6 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
         print(f"Columns removed: {all_null_cols}")
     print()
     print(f"Removed constant-value columns: {len(constant_cols)}")
-    if constant_cols:
-        print("Columns removed with constant values:")
-        for col, val in constant_cols.items():
-            print(f"  - {col}: {val}")
 
     print()
     print(f"Removed fixed columns: {len(removed_fixed_cols)}")
@@ -686,10 +590,11 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     return cleaned_df
 
+
 def filter_primary_secondary_decisions(
-    df: pd.DataFrame,
-    prim_idx: int | None = None,
-    second_idx: int | None = None,
+        df: pd.DataFrame,
+        prim_idx: int | None = None,
+        second_idx: int | None = None,
 ) -> pd.DataFrame:
     Decision = df['Decision'].drop_duplicates().reset_index(drop=True)
     print('Choose 2 indexes 1 at a time of Primary and Second decision')
@@ -700,6 +605,8 @@ def filter_primary_secondary_decisions(
     secondary_decision = Decision[second]
     df_filtered = df[df["Decision"].isin([primary_decision, secondary_decision])]
     return df_filtered
+
+
 # ===== Run as script: edit these =====
 def run_llm_QA_on_splits(txt_path: str) -> str | None:
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -725,7 +632,7 @@ def run_llm_QA_on_splits(txt_path: str) -> str | None:
      we are trying to distinguish between two targets by applying a Rule. 
      Your task is to asses if the Rule makes sense to be applied. 
      Analyze the Rule logic and the two groups devided in order to make a decision
-     
+
      YOUR OUTPUT:
       Return a dict split_index:rule,valid_rule,explanation
       The rule is the variable along with a mathematical logic used to seperate between the groups.
@@ -799,7 +706,7 @@ def _try_dict_series(s: pd.Series) -> pd.Series | None:
         return None
     as_str = raw.astype(str).str.strip()
     looks = as_str.str.match(r"^\{", na=False)
-    if sum(looks)==0:
+    if sum(looks) == 0:
         return None
 
     out_cells: list[Any] = []
@@ -908,7 +815,7 @@ def _try_bool_series(s: pd.Series) -> pd.Series | None:
         if isinstance(v, (bool, np.bool_)):
             return bool(v)
         if isinstance(v, (int, np.integer, float, np.floating)) and not isinstance(
-            v, (bool, np.bool_)
+                v, (bool, np.bool_)
         ):
             if v == 1:
                 return True
@@ -1050,7 +957,7 @@ def add_days_ago_columns_for_all_datetimes_features(df: pd.DataFrame) -> pd.Data
         return out
 
     for i, a in enumerate(dt_cols):
-        for b in dt_cols[i + 1 :]:
+        for b in dt_cols[i + 1:]:
             new_name = f"{a} - {b} | days"
             if new_name in out.columns:
                 continue
@@ -1080,8 +987,55 @@ def add_Object_dtype_missing(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def convert_splits_to_csv(data, output_path="splits_results.csv"):
+    rows = []
+
+    for item in data:
+        # Base fields (everything except metrics_per_class)
+        base = {k: v for k, v in item.items() if k != "metrics_per_class"}
+
+        # Flatten metrics_per_class into a single row with class1, class2, etc.
+        metrics_dict = item.get("metrics_per_class", {})
+
+        items = list(metrics_dict.items())
+
+        row = base.copy()
+
+        # First class
+        if len(items) > 0:
+            cls1, metrics1 = items[0]
+            row["class1"] = cls1.strip()
+            for k, v in metrics1.items():
+                row[f"{k}_1"] = v
+
+        # Second class
+        if len(items) > 1:
+            cls2, metrics2 = items[1]
+            row["class2"] = cls2.strip()
+            for k, v in metrics2.items():
+                row[f"{k}_2"] = v
+
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    if not os.path.isfile(output_path):
+        # File doesn't exist → write with header
+        df.to_csv(output_path, index=False)
+    else:
+        # File exists → append without header
+        df.to_csv(output_path, mode='a', index=False, header=False)
+
+
+def generate_index_pairs(n):
+    pairs = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            pairs.append([i, j])
+    return pairs
+
+
 if __name__ == "__main__":
-    FILE_PATH = "/Users/oranfrydman/CaludeProj/data_set_3009.csv"
+    FILE_PATH = "/Users/oranfrydman/CaludeProj/Kuru_222_prod - BigSetRest.csv"
     TARGET_COLUMN = "Decision"
     NUM_SPLITS = 5
     CRITERION: Criterion = "entropy"
@@ -1091,33 +1045,26 @@ if __name__ == "__main__":
     df = parse_dataframe_dtypes(df)
     df = add_days_ago_columns_for_all_datetimes_features(df)
     df = add_Object_dtype_missing(df)
-    df = filter_primary_secondary_decisions(df)
-    print(df.dtypes)
+    pairs = generate_index_pairs(len(df['Decision'].drop_duplicates().reset_index(drop=True)))
+    for pair in pairs:
+        df_filtered = filter_primary_secondary_decisions(df, prim_idx=pair[0], second_idx=pair[1])
+        splits = top_single_split_options_df(
+            df_filtered,
+            TARGET_COLUMN,
+            criterion=CRITERION,
+            k=NUM_SPLITS,
+        )
 
-    splits = top_single_split_options_df(
-        df,
-        TARGET_COLUMN,
-        criterion=CRITERION,
-        k=NUM_SPLITS,
-    )
+        if not splits:
+            print("No splits found.")
+            raise SystemExit(0)
+        convert_splits_to_csv(splits)
+        run_top_splits_pipeline(df_filtered, TARGET_COLUMN, splits, CRITERION)
+        with open("best_splits_report.txt", "r", encoding="utf-8") as f:
+            pass
+            print(f.read())
+        # print(run_llm_QA_on_splits("best_splits_report.txt"))
 
-    if not splits:
-        print("No splits found.")
-        raise SystemExit(0)
-
-    run_top_splits_pipeline(df, TARGET_COLUMN, splits, CRITERION)
-    with open("best_splits_report.txt", "r", encoding="utf-8") as f:
-        print(f.read())
-    pass
-    #print(run_llm_QA_on_splits("best_splits_report.txt"))
-
-
-#todo:
-# - input ( csv , target_col)
-#- 2 decisions (try to devide) str : In , ==
-
-# SYstem output - 5 best splits
-# LLM iteration - applicable sensabilty
 
 
 

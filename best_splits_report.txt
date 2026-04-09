@@ -1,47 +1,47 @@
 Best splits for target column: 'Decision'
 
 Split 1
-  Rule: Comment inquiry date - Purchase Date | days <= 3.5
-  Score improvement: 0.837550
-  Left rows: 16
-  Right rows: 22
-  Precision / recall per target class (majority class per leaf):
-    'Order created recentley | Instruct to wait 24 hours': precision=1.0000  recall=0.9412  support=17
-    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9545  recall=1.0000  support=21
-
-Split 2
-  Rule: Comment inquiry date - The date the order was created | days <= 3.5
-  Score improvement: 0.837550
-  Left rows: 16
-  Right rows: 22
-  Precision / recall per target class (majority class per leaf):
-    'Order created recentley | Instruct to wait 24 hours': precision=1.0000  recall=0.9412  support=17
-    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9545  recall=1.0000  support=21
-
-Split 3
-  Rule: The channel that we will follow up with the customer is null
-  Score improvement: 0.734012
-  Left rows: 15
-  Right rows: 23
-  Precision / recall per target class (majority class per leaf):
-    'Order created recentley | Instruct to wait 24 hours': precision=1.0000  recall=0.8824  support=17
-    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9130  recall=1.0000  support=21
-
-Split 4
-  Rule: The ID of the escalation tag based on the organization == 'c91968c0-b698-4897-9f05-7a95069fb7b3'
-  Score improvement: 0.694967
-  Left rows: 21
+  Rule: Address details were fully provided <= 0.5
+  Score improvement: 0.485461
+  Left rows: 2
   Right rows: 17
   Precision / recall per target class (majority class per leaf):
-    'Order created recentley | Instruct to wait 24 hours': precision=0.9412  recall=0.9412  support=17
-    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9524  recall=0.9524  support=21
+    'Change shipping address and defult address ': precision=1.0000  recall=1.0000  support=17
+    'Information is still not clear | Escalate to agent SKIP': precision=1.0000  recall=1.0000  support=2
+
+Split 2
+  Rule: New Address is null
+  Score improvement: 0.485461
+  Left rows: 2
+  Right rows: 17
+  Precision / recall per target class (majority class per leaf):
+    'Change shipping address and defult address ': precision=1.0000  recall=1.0000  support=17
+    'Information is still not clear | Escalate to agent SKIP': precision=1.0000  recall=1.0000  support=2
+
+Split 3
+  Rule: In case the customer wants to change the name in the shipping address - what is the new name? is null
+  Score improvement: 0.485461
+  Left rows: 2
+  Right rows: 17
+  Precision / recall per target class (majority class per leaf):
+    'Change shipping address and defult address ': precision=1.0000  recall=1.0000  support=17
+    'Information is still not clear | Escalate to agent SKIP': precision=1.0000  recall=1.0000  support=2
+
+Split 4
+  Rule: New Address Exists <= 0.5
+  Score improvement: 0.485461
+  Left rows: 2
+  Right rows: 17
+  Precision / recall per target class (majority class per leaf):
+    'Change shipping address and defult address ': precision=1.0000  recall=1.0000  support=17
+    'Information is still not clear | Escalate to agent SKIP': precision=1.0000  recall=1.0000  support=2
 
 Split 5
-  Rule: The ID of the escalation tag based on the organization is null
-  Score improvement: 0.694967
-  Left rows: 17
-  Right rows: 21
+  Rule: 'shipping' in The type of address change the customer asked to update 
+  Score improvement: 0.274934
+  Left rows: 15
+  Right rows: 4
   Precision / recall per target class (majority class per leaf):
-    'Order created recentley | Instruct to wait 24 hours': precision=0.9412  recall=0.9412  support=17
-    'Pre shipment with Warehouse Delays & Stock issues': precision=0.9524  recall=0.9524  support=21
+    'Change shipping address and defult address ': precision=0.8947  recall=1.0000  support=17
+    'Information is still not clear | Escalate to agent SKIP': precision=0.0000  recall=0.0000  support=2
 
